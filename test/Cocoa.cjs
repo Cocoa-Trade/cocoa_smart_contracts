@@ -99,17 +99,17 @@ describe("Lock", function () {
 
     it("Should calc percantages", async function () {
       const { cocoa, usdx, owner, otherAccount, acc1, acc2, acc3, acc4 } = await loadFixture(deployCocoaFixture);
-      await usdx.connect(acc1).approve(cocoa, 10 ** 6 * 12_000);
+      await usdx.connect(acc1).approve(cocoa, 10 ** 6 * 100);
       await usdx.connect(acc2).approve(cocoa, 10 ** 6 * 1_000);
       await usdx.connect(acc3).approve(cocoa, 10 ** 6 * 30_000);
       await usdx.connect(acc4).approve(cocoa, 10 ** 6 * 4000);
-      await expect(cocoa.connect(acc1).initSaleUSDT(10 ** 6 * 12_000)).not.to.be.reverted;
+      await expect(cocoa.connect(acc1).initSaleUSDT(10 ** 6 * 100)).not.to.be.reverted;
       await expect(cocoa.connect(acc2).initSaleUSDT(10 ** 6 * 1_000)).not.to.be.reverted;
       await expect(cocoa.connect(acc3).initSaleUSDT(10 ** 6 * 30_000)).not.to.be.reverted;
       await expect(cocoa.connect(acc4).initSaleUSDT(10 ** 6 * 4000)).not.to.be.reverted;
-      await usdx.connect(owner).approve(cocoa, 10 ** 6 * 270_000);
-      await expect(cocoa.connect(owner).depositFunds(10 ** 6 * 270_000)).not.to.be.reverted;
-      expect(await cocoa.connect(otherAccount).getRewardsTotal()).to.equal(10**6*270_000);
+      await usdx.connect(owner).approve(cocoa, 10 ** 6 * 300_000);
+      await expect(cocoa.connect(owner).depositFunds(10 ** 6 * 300_000)).not.to.be.reverted;
+      expect(await cocoa.connect(otherAccount).getRewardsTotal()).to.equal(10**6*300_000);
       console.log('calc percentage :>> ', await cocoa.connect(acc1).calculateUserTokenPercentage());
       console.log('calc percentage :>> ', await cocoa.connect(acc2).calculateUserTokenPercentage());
       console.log('calc percentage :>> ', await cocoa.connect(acc3).calculateUserTokenPercentage());

@@ -6,14 +6,14 @@ pragma solidity 0.8.24;
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/utils/Pausable.sol";
+// import "@openzeppelin/contracts/utils/Pausable.sol";
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 using SafeERC20 for IERC20;
 
-contract CocoaToken is ERC20, Ownable, ReentrancyGuard, Pausable {
+contract CocoaToken is ERC20, Ownable, ReentrancyGuard {
     mapping(address => uint256) private _balances;
     uint256 private _rewards_total;
     uint256 private _tokens_total;
@@ -87,18 +87,13 @@ contract CocoaToken is ERC20, Ownable, ReentrancyGuard, Pausable {
             usd_token.balanceOf(user_address) >= amount,
             "Insufficient Token balance"
         );
-        bool success = usd_token.transferFrom(
-            user_address,
-            address(this),
-            amount
-        );
-        require(success, "Token transfer failed");
+
+        usd_token.safeTransferFrom(user_address, address(this), amount);
         IERC20(address(this)).safeTransfer(msg.sender, amount);
         _balances[user_address] += amount;
         emit Payment(user_address, amount, sell_token);
         return true;
     }
-
 
     function initSaleUSDT(
         uint256 amount
@@ -170,12 +165,11 @@ contract CocoaToken is ERC20, Ownable, ReentrancyGuard, Pausable {
             usd_token.balanceOf(owner()) >= amount,
             "Insufficient Token balance"
         );
-        bool success = usd_token.transferFrom(owner(), address(this), amount);
-        require(success, "Token transfer failed");
+        usd_token.safeTransferFrom(owner(), address(this), amount);
         _rewards_total = amount;
     }
 
-    function withdraw(IERC20 token, uint256 amount) external onlyOwner {
+    function withdraw(IERC20 token, uint256 amount) public onlyOwner {
         require(
             token.balanceOf(address(this)) >= amount,
             "Not enought balance"
@@ -194,14 +188,8 @@ contract CocoaToken is ERC20, Ownable, ReentrancyGuard, Pausable {
     fallback() external payable {
         revert("Oops...dont do this");
     }
+
     /* ========================== EVENTS ========================== */
 
     event Payment(address user_address, uint256 amount, address sell_token);
-
-    // * claim all // locked? if contract funded
-    //   balances map
-    //   burn
-    //   calc from var totalSupply
-    // * safetransfers
-    // * withdraw usdt/c - to addr list
 }

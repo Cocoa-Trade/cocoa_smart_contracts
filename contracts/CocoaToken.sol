@@ -81,7 +81,7 @@ contract CocoaToken is ERC20, Ownable, ReentrancyGuard {
         address user_address,
         uint256 amount,
         address sell_token
-    ) private nonReentrant whenNotPaused returns (bool) {
+    ) private nonReentrant returns (bool) {
         IERC20 usd_token = IERC20(sell_token);
         require(
             usd_token.balanceOf(user_address) >= amount,

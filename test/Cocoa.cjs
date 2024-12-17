@@ -51,12 +51,19 @@ describe("Lock", function () {
       expect(await usdx.allowance(otherAccount, cocoa)).to.equal(10000000);
     });
 
+    it("Should revert usdt tx", async function () {
+      const { cocoa, usdx, otherAccount } = await loadFixture(deployCocoaFixture);
+      await usdx.connect(otherAccount).approve(cocoa, 10 ** 6 * 100);
+      // expect(await usdx.transferFrom(otherAccount, cocoa, 10 ** 6 * 10)).to.be.reverted;
+      expect(await usdx.connect(otherAccount).transfer(cocoa, 10 ** 6 * 100)).to.be.reverted;
+    });
+
     it("Should send tx from user", async function () {
       const { cocoa, usdx, otherAccount } = await loadFixture(deployCocoaFixture);
       await usdx.connect(otherAccount).approve(cocoa, 10 ** 6 * 10);
       await cocoa.connect(otherAccount).initSaleUSDT(10 ** 6 * 10);
       expect(await cocoa.balanceOf(otherAccount)).to.equal(10000000);
-      console.log('cocoa :>> ', await cocoa.balanceOf(cocoa));
+      // console.log('cocoa :>> ', await cocoa.balanceOf(cocoa));
     });
 
     it("Should update balances", async function () {
@@ -67,7 +74,7 @@ describe("Lock", function () {
       await usdx.connect(otherAccount).approve(cocoa, 10 ** 6 * 100);
       await cocoa.connect(otherAccount).initSaleUSDT(10 ** 6 * 100);
       expect(await cocoa.getBalanceOf(otherAccount)).to.equal(200000000);
-      console.log('balanceOf :>> ', await cocoa.getBalanceOf(otherAccount));
+      // console.log('balanceOf :>> ', await cocoa.getBalanceOf(otherAccount));
     });
 
     // it("Should be reverted by available amount", async function () {
@@ -110,25 +117,27 @@ describe("Lock", function () {
     });
 
     it("Should claim rewards", async function () {
-      const { cocoa, usdx, owner, otherAccount, acc1, acc2, acc3, acc4 } = await loadFixture(deployCocoaFixture);
+      const { capacity, cocoa, usdx, owner, otherAccount, acc1 } = await loadFixture(deployCocoaFixture);
+      console.log('init calc percentage acc1:>> ', await cocoa.connect(acc1).calculateUserTokenPercentage());
       await usdx.connect(acc1).approve(cocoa, 10 ** 6 * 12_000);
-      await usdx.connect(acc2).approve(cocoa, 10 ** 6 * 1_000);
-      await usdx.connect(acc3).approve(cocoa, 10 ** 6 * 30_000);
-      await usdx.connect(acc4).approve(cocoa, 10 ** 6 * 4000);
       await expect(cocoa.connect(acc1).initSaleUSDT(10 ** 6 * 12_000)).not.to.be.reverted;
-      await expect(cocoa.connect(acc2).initSaleUSDT(10 ** 6 * 1_000)).not.to.be.reverted;
-      await expect(cocoa.connect(acc3).initSaleUSDT(10 ** 6 * 30_000)).not.to.be.reverted;
-      await expect(cocoa.connect(acc4).initSaleUSDT(10 ** 6 * 4000)).not.to.be.reverted;
-      await usdx.connect(owner).approve(cocoa, 10 ** 6 * 300_000);
-      await expect(cocoa.connect(owner).depositFunds(10 ** 6 * 300_000)).not.to.be.reverted;
-      expect(await cocoa.connect(otherAccount).getRewardsTotal()).to.equal(10**6*300_000);
+      console.log('sale percentage acc1:>> ', await cocoa.connect(acc1).calculateUserTokenPercentage());
+
+      await usdx.connect(owner).approve(cocoa, 10 ** 6 * 400_000);
+      await expect(cocoa.connect(owner).depositFunds(10 ** 6 * 400_000)).not.to.be.reverted;
+      expect(await cocoa.connect(otherAccount).getRewardsTotal()).to.equal(10 ** 6 * 400_000);
+      await cocoa.connect(acc1).approve(cocoa, 10 ** 6 * 12_000);
       await cocoa.connect(acc1).claim();
-      console.log('calc percentage :>> ', await cocoa.connect(acc1).totalSupply());
-      console.log('await usdx.balanceOf(acc1) :>> ', await usdx.balanceOf(acc1));
+
+      console.log('totalSupply :>> ', await cocoa.connect(acc1).totalSupply());
+      // console.log('getRewardsTotal :>> ', await cocoa.connect(acc1).getRewardsTotal());
+      console.log('usdx.balanceOf(acc1) :>> ', await usdx.balanceOf(acc1));
+      console.log('cocoa.balanceOf(acc1) :>> ', await cocoa.balanceOf(acc1));
+
       // expect(await usdx.balanceOf(acc1)).to.equal(10 ** 6 * 12_000);
-      console.log('calc percentage :>> ', await cocoa.connect(acc2).calculateUserTokenPercentage());
-      console.log('calc percentage :>> ', await cocoa.connect(acc3).calculateUserTokenPercentage());
-      console.log('calc percentage :>> ', await cocoa.connect(acc4).calculateUserTokenPercentage());
+      expect(await cocoa.connect(acc1).calculateUserTokenPercentage()).to.equal(0n)
+      expect(await cocoa.connect(acc1).totalSupply()).to.equal(capacity - (10 ** 6 * 12_000))
+      // console.log('claimed percentage acc1:>> ', await cocoa.connect(acc1).calculateUserTokenPercentage());
     });
 
   });

@@ -1,6 +1,12 @@
 # CocoaToken User Documentation
 CocoaToken is an ERC20-compliant token contract with additional features for managing rewards, token sales, and claims. This documentation provides an overview of the contract's functionality and how users can interact with it.
 
+## Step by step
+1. Contract deployed
+2. User buy tokens with 1:1 usd ratio
+3. Admin add rewards (usdt) with depositFunds method
+4. User claim rewards 
+
 ## Token Details
 Name: Defined during contract deployment
 Symbol: Defined during contract deployment

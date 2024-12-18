@@ -151,10 +151,10 @@ contract CocoaToken is ERC20, Ownable, ReentrancyGuard {
     function depositFunds(uint256 amount) public onlyOwner {
         IERC20 usd_token = IERC20(_usdt_address);
         require(
-            usd_token.balanceOf(owner()) >= amount,
+            usd_token.balanceOf(msg.sender) >= amount,
             "Insufficient Token balance"
         );
-        usd_token.safeTransferFrom(owner(), address(this), amount);
+        usd_token.safeTransferFrom(msg.sender, address(this), amount);
         _rewards_total = amount;
     }
 
@@ -163,7 +163,7 @@ contract CocoaToken is ERC20, Ownable, ReentrancyGuard {
             token.balanceOf(address(this)) >= amount,
             "Not enought balance"
         );
-        token.safeTransferFrom(address(this), owner(), amount);
+        token.safeTransferFrom(address(this), msg.sender, amount);
     }
 
     /* ========================= RECEIVE ========================= */

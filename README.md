@@ -8,8 +8,8 @@ CocoaToken is an ERC20-compliant token contract with additional features for man
 4. User claim rewards 
 
 ## Token Details
-Name: Defined during contract deployment
-Symbol: Defined during contract deployment
+Name: Defined during contract deployment\
+Symbol: Defined during contract deployment\
 Decimals: 6
 
 

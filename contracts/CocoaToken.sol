@@ -47,8 +47,8 @@ contract CocoaToken is ERC20, Ownable, ReentrancyGuard {
         string memory name,
         string memory symbol
     ) ERC20(name, symbol) Ownable(initialOwner) {
-        _minAmount = 1000;
-        _maxAmount = 1e11;
+        _minAmount = 1e6;
+        _maxAmount = 1e12;
         _mint(address(this), capacity);
         _tokens_total = capacity;
     }

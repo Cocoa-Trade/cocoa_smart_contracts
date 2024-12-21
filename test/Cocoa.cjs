@@ -140,5 +140,10 @@ describe("Lock", function () {
       // console.log('claimed percentage acc1:>> ', await cocoa.connect(acc1).calculateUserTokenPercentage());
     });
 
+    it("Should get balance by wallet", async function () {
+      const { capacity, cocoa, usdx, owner, otherAccount, acc1 } = await loadFixture(deployCocoaFixture);
+      console.log('getBalanceOf otherAccount', await cocoa.getBalanceOf(otherAccount));
+    });
+
   });
 });

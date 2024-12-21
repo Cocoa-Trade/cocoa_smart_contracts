@@ -133,3 +133,4 @@ dist
 /cache
 /artifacts
 /.openzeppelin
+/scripts

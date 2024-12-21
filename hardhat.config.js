@@ -19,7 +19,11 @@ module.exports = {
   },
   networks: {
     zkEVM: {
-      url: process.env.ALCHEMY_HTTP_TRANSPORT_URL,
+      url: process.env.ALCHEMY_POL_HTTP_TRANSPORT_URL,
+      accounts: [process.env.SIGNER_PRIVATE_KEY],
+    },
+    arbitrum: {
+      url: process.env.ALCHEMY_ARB_HTTP_TRANSPORT_URL,
       accounts: [process.env.SIGNER_PRIVATE_KEY],
     },
   },
@@ -27,7 +31,7 @@ module.exports = {
     chainId: 137,
     forking: {
       enabled: true,
-      url: process.env.ALCHEMY_HTTP_TRANSPORT_URL,
+      url: process.env.ALCHEMY_POL_HTTP_TRANSPORT_URL,
     },
   },
 };

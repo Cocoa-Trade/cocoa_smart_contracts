@@ -122,11 +122,7 @@ contract CocoaToken is ERC20, Ownable, ReentrancyGuard {
             "Insufficient Token balance"
         );
 
-        token.safeTransferFrom(
-            msg.sender,
-            address(this),
-            user_available_balance
-        );
+        token.safeTransferFrom(msg.sender, address(this), user_available_balance);
 
         usd_token.approve(address(this), 0);
         usd_token.approve(address(this), userRewardShare);
@@ -163,6 +159,7 @@ contract CocoaToken is ERC20, Ownable, ReentrancyGuard {
             token.balanceOf(address(this)) >= amount,
             "Not enought balance"
         );
+        token.approve(address(this), amount);
         token.safeTransferFrom(address(this), msg.sender, amount);
     }
 

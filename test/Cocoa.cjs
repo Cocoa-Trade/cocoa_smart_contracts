@@ -70,10 +70,10 @@ describe("Lock", function () {
       const { cocoa, usdx, otherAccount } = await loadFixture(deployCocoaFixture);
       await usdx.connect(otherAccount).approve(cocoa, 10 ** 6 * 100);
       await cocoa.connect(otherAccount).initSaleUSDT(10 ** 6 * 100);
-      expect(await cocoa.getBalanceOf(otherAccount)).to.equal(100000000);
+      expect(await cocoa.balanceOf(otherAccount)).to.equal(100000000);
       await usdx.connect(otherAccount).approve(cocoa, 10 ** 6 * 100);
       await cocoa.connect(otherAccount).initSaleUSDT(10 ** 6 * 100);
-      expect(await cocoa.getBalanceOf(otherAccount)).to.equal(200000000);
+      expect(await cocoa.balanceOf(otherAccount)).to.equal(200000000);
       // console.log('balanceOf :>> ', await cocoa.getBalanceOf(otherAccount));
     });
 
@@ -142,7 +142,7 @@ describe("Lock", function () {
 
     it("Should get balance by wallet", async function () {
       const { capacity, cocoa, usdx, owner, otherAccount, acc1 } = await loadFixture(deployCocoaFixture);
-      console.log('getBalanceOf otherAccount', await cocoa.getBalanceOf(otherAccount));
+      console.log('getBalanceOf otherAccount', await cocoa.balanceOf(otherAccount));
     });
 
   });

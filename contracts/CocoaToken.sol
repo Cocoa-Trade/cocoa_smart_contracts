@@ -15,9 +15,9 @@ using SafeERC20 for IERC20;
 
 contract CocoaToken is ERC20, Ownable, ReentrancyGuard {
     uint256 private _rewards_total;
-    uint256 private _tokens_total;
-    uint256 private _minAmount;
-    uint256 private _maxAmount;
+    uint256 private immutable _tokens_total;
+    uint256 private immutable _minAmount;
+    uint256 private immutable _maxAmount;
     address private _usdt_address; // 0xc2132D05D31c914a87C6611C10748AEb04B58e8F
     address private _usdc_address; // 0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359
 
@@ -124,8 +124,8 @@ contract CocoaToken is ERC20, Ownable, ReentrancyGuard {
 
         token.safeTransferFrom(msg.sender, address(this), user_available_balance);
 
-        usd_token.approve(address(this), 0);
-        usd_token.approve(address(this), userRewardShare);
+        require(usd_token.approve(address(this), 0), 'Usdt approve was not reset');
+        require(usd_token.approve(address(this), userRewardShare), 'Usdt Reward was not approved');
         usd_token.safeTransferFrom(address(this), msg.sender, userRewardShare);
 
         _burn(address(this), user_available_balance);
@@ -159,7 +159,7 @@ contract CocoaToken is ERC20, Ownable, ReentrancyGuard {
             token.balanceOf(address(this)) >= amount,
             "Not enought balance"
         );
-        token.approve(address(this), amount);
+        require(token.approve(address(this), amount), 'Token was not approved');
         token.safeTransferFrom(address(this), msg.sender, amount);
     }
 

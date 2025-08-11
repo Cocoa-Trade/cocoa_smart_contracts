@@ -15,11 +15,15 @@ contract CocoaTokenFactory is Ownable {
 
     function deployNewCocoaToken(
         uint256 capacity,
+        uint256 minAmount,
         string memory name,
-        string memory symbol
+        string memory symbol,
+        address usdtAddress,
+        address usdcAddress,
+        bool isClaimEnabled
     ) public returns (address newToken) {
         require(factoryOperators[msg.sender], "Only for operators");
-        newToken = address(new CocoaToken(owner(), capacity, name, symbol));
+        newToken = address(new CocoaToken(owner(), capacity, minAmount, name, symbol, usdtAddress, usdcAddress, isClaimEnabled));
     }
 
     ///////////////////////////////////////////

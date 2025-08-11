@@ -6,51 +6,36 @@ pragma solidity 0.8.24;
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-// import "@openzeppelin/contracts/utils/Pausable.sol";
-
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-
-using SafeERC20 for IERC20;
 
 contract CocoaToken is ERC20, Ownable, ReentrancyGuard {
-    uint256 private _rewards_total;
-    uint256 private immutable _tokens_total;
-    uint256 private immutable _minAmount;
-    uint256 private immutable _maxAmount;
-    address private _usdt_address; // 0xc2132D05D31c914a87C6611C10748AEb04B58e8F
-    address private _usdc_address; // 0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359
+    bool public isClaimEnabled;
+    address public immutable usdtAddress;
+    address public immutable usdcAddress;
+    uint256 public immutable tokensTotal;
+    uint256 private _rewardsTotal;
+    uint256 private immutable minAmount;
 
     function getRewardsTotal() public view returns (uint256) {
-        return _rewards_total;
-    }
-
-    function getUsdtContract() public view returns (address) {
-        return _usdt_address;
-    }
-
-    function setUsdtContract(address usdt) public onlyOwner {
-        _usdt_address = usdt;
-    }
-
-    function getUsdcContract() public view returns (address) {
-        return _usdc_address;
-    }
-
-    function setUsdcContract(address usdc) public onlyOwner {
-        _usdc_address = usdc;
+        return _rewardsTotal;
     }
 
     constructor(
         address initialOwner,
-        uint256 capacity,
+        uint256 tokensTotal_,
+        uint256 minAmount_,
         string memory name,
-        string memory symbol
+        string memory symbol,
+        address usdtAddress_,
+        address usdcAddress_,
+        bool isClaimEnabled_
     ) ERC20(name, symbol) Ownable(initialOwner) {
-        _minAmount = 1e6;
-        _maxAmount = 1e12;
-        _mint(address(this), capacity);
-        _tokens_total = capacity;
+        _mint(address(this), tokensTotal_);
+        tokensTotal = tokensTotal_;
+        minAmount = minAmount_;
+        usdtAddress = usdtAddress_;
+        usdcAddress = usdcAddress_;
+        isClaimEnabled = isClaimEnabled_;
     }
 
     /**
@@ -61,48 +46,45 @@ contract CocoaToken is ERC20, Ownable, ReentrancyGuard {
         _;
     }
 
-    modifier minMax(uint256 amount) {
-        require(amount >= _minAmount && amount <= _maxAmount, "Min Max error");
-        _;
-    }
-
     function decimals() public view virtual override returns (uint8) {
-        return 6;
+        return 18;
     }
 
     /* ======================= USER ACTIONS ======================= */
 
-    function _initSale(
+    function initSale(
         address user_address,
         uint256 amount,
         address sell_token
     ) private nonReentrant returns (bool) {
+        require(amount >= minAmount, "Amount is below minimum");
+        uint256 cocoaAmount = amount / 1e12;
+        require(cocoaAmount <= balanceOf(address(this)), "Amount exceeds available tokens");
+
         IERC20 usd_token = IERC20(sell_token);
         require(
             usd_token.balanceOf(user_address) >= amount,
             "Insufficient Token balance"
         );
 
-        usd_token.safeTransferFrom(user_address, address(this), amount);
-        IERC20(address(this)).safeTransfer(msg.sender, amount);
+        require(usd_token.transferFrom(user_address, address(this), amount), "User tokens transfer failed");
+        require(IERC20(address(this)).transfer(msg.sender, cocoaAmount), "Token transfer failed");
         emit Payment(user_address, amount, sell_token);
         return true;
     }
 
     function initSaleUSDT(
         uint256 amount
-    ) public onlyWallets minMax(amount) returns (bool) {
-        bool success = _initSale(msg.sender, amount, _usdt_address);
+    ) external onlyWallets {
+        bool success = initSale(msg.sender, amount, usdtAddress);
         require(success, "Token transfer failed");
-        return true;
     }
 
     function initSaleUSDC(
         uint256 amount
-    ) public onlyWallets minMax(amount) returns (bool) {
-        bool success = _initSale(msg.sender, amount, _usdc_address);
+    ) external onlyWallets {
+        bool success = initSale(msg.sender, amount, usdcAddress);
         require(success, "Token transfer failed");
-        return true;
     }
 
     function claim() public onlyWallets nonReentrant returns (uint256) {
@@ -110,31 +92,31 @@ contract CocoaToken is ERC20, Ownable, ReentrancyGuard {
         uint256 user_available_balance = token.balanceOf(msg.sender);
         require(
             user_available_balance > 0,
-            "Claim failed, balance error. You didnt buy that amount of tokens"
+            "Claim failed, balance error"
         );
 
-        uint256 percentage = (user_available_balance * 1e6) / _tokens_total;
-        uint256 userRewardShare = (_rewards_total * percentage) / 1e6;
+        uint256 percentage = (user_available_balance * 1e6) / tokensTotal;
+        uint256 userRewardShare = (_rewardsTotal * percentage) / 1e6;
 
-        IERC20 usd_token = IERC20(_usdt_address);
+        IERC20 usd_token = IERC20(usdtAddress);
         require(
             usd_token.balanceOf(address(this)) >= userRewardShare,
-            "Insufficient Token balance"
+            "Insufficient Token balance on contract"
         );
 
-        token.safeTransferFrom(msg.sender, address(this), user_available_balance);
+        require(token.transferFrom(msg.sender, address(this), user_available_balance), "Transfer from user failed");
+        _burn(address(this), user_available_balance);
 
         require(usd_token.approve(address(this), 0), 'Usdt approve was not reset');
         require(usd_token.approve(address(this), userRewardShare), 'Usdt Reward was not approved');
-        usd_token.safeTransferFrom(address(this), msg.sender, userRewardShare);
+        require(usd_token.transferFrom(address(this), msg.sender, userRewardShare), "Transfer to user failed");
 
-        _burn(address(this), user_available_balance);
         return userRewardShare;
     }
 
     function calculateUserTokenPercentage() public view returns (uint256) {
         uint256 userBalance = IERC20(address(this)).balanceOf(msg.sender);
-        uint256 totalSupply = _tokens_total;
+        uint256 totalSupply = tokensTotal;
         require(totalSupply > 0, "Total supply is zero");
 
         uint256 percentage = (userBalance * 1e6) / totalSupply;
@@ -145,13 +127,13 @@ contract CocoaToken is ERC20, Ownable, ReentrancyGuard {
     /* ====================== ADMIN ACTIONS ====================== */
 
     function depositFunds(uint256 amount) public onlyOwner {
-        IERC20 usd_token = IERC20(_usdt_address);
+        IERC20 usd_token = IERC20(usdtAddress);
         require(
             usd_token.balanceOf(msg.sender) >= amount,
             "Insufficient Token balance"
         );
-        usd_token.safeTransferFrom(msg.sender, address(this), amount);
-        _rewards_total = amount;
+        require(usd_token.transferFrom(msg.sender, address(this), amount), "Deposit transfer failed");
+        _rewardsTotal = amount;
     }
 
     function withdraw(IERC20 token, uint256 amount) public onlyOwner {
@@ -160,7 +142,7 @@ contract CocoaToken is ERC20, Ownable, ReentrancyGuard {
             "Not enought balance"
         );
         require(token.approve(address(this), amount), 'Token was not approved');
-        token.safeTransferFrom(address(this), msg.sender, amount);
+        require(token.transferFrom(address(this), msg.sender, amount), "Withdraw to owner failed");
     }
 
     /* ========================= RECEIVE ========================= */

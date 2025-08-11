@@ -1,31 +1,31 @@
 const {
-  time,
   loadFixture,
 } = require("@nomicfoundation/hardhat-toolbox/network-helpers.js");
-const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs.js");
 const { ethers, upgrades } = require('hardhat');
 const { expect } = require("chai");
 
-describe("Lock", function () {
+describe("CocoaToken", function () {
   async function deployCocoaFixture() {
-    const capacity = 10 ** 6 * 300_000;
-    const usdx_amount = 10 ** 6 * 500_000;
+    const capacity = ethers.parseUnits("300000", 6);
+    const minAmount = ethers.parseUnits("500", 18);
+    const usdx_amount = ethers.parseUnits("20000", 18);
 
     // Contracts are deployed using the first signer/account by default
     const [owner, otherAccount, acc1, acc2, acc3, acc4] = await ethers.getSigners();
 
-    const CocoaToken = await ethers.getContractFactory("CocoaToken");
-    const cocoa = await CocoaToken.deploy(owner, capacity, "test token", "tttwww1");
-
     const UsdxToken = await ethers.getContractFactory("UsdxToken");
     const usdx = await UsdxToken.deploy();
+    const usdx_addr = await usdx.getAddress();
+
+    const CocoaToken = await ethers.getContractFactory("CocoaToken");
+    const cocoa = await CocoaToken.deploy(owner, capacity, minAmount, "test token", "tttwww1", usdx_addr, usdx_addr, false);
+
     await usdx.mint(owner, usdx_amount);
     await usdx.mint(otherAccount, usdx_amount);
     await usdx.mint(acc1, usdx_amount);
     await usdx.mint(acc2, usdx_amount);
     await usdx.mint(acc3, usdx_amount);
     await usdx.mint(acc4, usdx_amount);
-    await cocoa.setUsdtContract(usdx);
 
     return { cocoa, usdx, capacity, usdx_amount, owner, otherAccount, acc1, acc2, acc3, acc4 };
   }
@@ -33,116 +33,95 @@ describe("Lock", function () {
   describe("Deployment", function () {
     it("Should be minted as capacity", async function () {
       const { cocoa, capacity } = await loadFixture(deployCocoaFixture);
-
-      expect(await cocoa.balanceOf(cocoa)).to.equal(capacity);
+      expect(await cocoa.balanceOf(await cocoa.getAddress())).to.equal(capacity);
     });
 
     it("USDX Should be setted as usdt", async function () {
       const { cocoa, usdx } = await loadFixture(deployCocoaFixture);
-      const usdt = await cocoa.getUsdtContract();
-      expect(usdt).to.equal(usdx);
+      const usdt = await cocoa.usdtAddress();
+      expect(usdt).to.equal(await usdx.getAddress());
     });
   });
 
   describe("Usage", function () {
     it("Should USDX be approved", async function () {
       const { cocoa, usdx, otherAccount } = await loadFixture(deployCocoaFixture);
-      await usdx.connect(otherAccount).approve(cocoa, 10 ** 6 * 10);
-      expect(await usdx.allowance(otherAccount, cocoa)).to.equal(10000000);
+      const approveAmount = ethers.parseUnits("10", 18);
+      await usdx.connect(otherAccount).approve(cocoa, approveAmount);
+      expect(await usdx.allowance(otherAccount, await cocoa.getAddress())).to.equal(approveAmount);
     });
 
-    it("Should revert usdt tx", async function () {
+    it("Should not change total rewards", async function () {
       const { cocoa, usdx, otherAccount } = await loadFixture(deployCocoaFixture);
-      await usdx.connect(otherAccount).approve(cocoa, 10 ** 6 * 100);
-      // expect(await usdx.transferFrom(otherAccount, cocoa, 10 ** 6 * 10)).to.be.reverted;
-      expect(await usdx.connect(otherAccount).transfer(cocoa, 10 ** 6 * 100)).to.be.reverted;
+      const amount = ethers.parseUnits("100", 6);
+      await usdx.connect(otherAccount).approve(cocoa, amount);
+      await expect(usdx.connect(otherAccount).transfer(cocoa, amount)).not.to.be.reverted;
+      await expect(await cocoa.getRewardsTotal()).to.equal(0)
     });
 
     it("Should send tx from user", async function () {
       const { cocoa, usdx, otherAccount } = await loadFixture(deployCocoaFixture);
-      await usdx.connect(otherAccount).approve(cocoa, 10 ** 6 * 10);
-      await cocoa.connect(otherAccount).initSaleUSDT(10 ** 6 * 10);
-      expect(await cocoa.balanceOf(otherAccount)).to.equal(10000000);
-      // console.log('cocoa :>> ', await cocoa.balanceOf(cocoa));
+      const amount = ethers.parseUnits("500", 18);
+      await usdx.connect(otherAccount).approve(cocoa, amount);
+      await cocoa.connect(otherAccount).initSaleUSDT(amount);
+      expect(await cocoa.balanceOf(otherAccount)).to.equal(ethers.parseUnits("500", 6));
     });
 
     it("Should update balances", async function () {
       const { cocoa, usdx, otherAccount } = await loadFixture(deployCocoaFixture);
-      await usdx.connect(otherAccount).approve(cocoa, 10 ** 6 * 100);
-      await cocoa.connect(otherAccount).initSaleUSDT(10 ** 6 * 100);
-      expect(await cocoa.balanceOf(otherAccount)).to.equal(100000000);
-      await usdx.connect(otherAccount).approve(cocoa, 10 ** 6 * 100);
-      await cocoa.connect(otherAccount).initSaleUSDT(10 ** 6 * 100);
-      expect(await cocoa.balanceOf(otherAccount)).to.equal(200000000);
-      // console.log('balanceOf :>> ', await cocoa.getBalanceOf(otherAccount));
+      const amount = ethers.parseUnits("500", 18);
+      await usdx.connect(otherAccount).approve(cocoa, amount);
+      await cocoa.connect(otherAccount).initSaleUSDT(amount);
+      expect(await cocoa.balanceOf(otherAccount)).to.equal(ethers.parseUnits("500", 6));
+      await usdx.connect(otherAccount).approve(cocoa, amount);
+      await cocoa.connect(otherAccount).initSaleUSDT(amount);
+      expect(await cocoa.balanceOf(otherAccount)).to.equal(ethers.parseUnits("1000", 6));
     });
-
-    // it("Should be reverted by available amount", async function () {
-    //   const { cocoa, usdx, otherAccount } = await loadFixture(deployCocoaFixture);
-    //   await usdx.connect(otherAccount).approve(cocoa, 10 ** 6 * 600);
-    //   await expect(cocoa.connect(otherAccount).initSaleUSDT(10 ** 6 * 600)).to.be.reverted;
-    // });
-
-    // it("Should be reverted by available amount", async function () {
-    //   const { cocoa, usdx, otherAccount, acc1, acc2, acc3, acc4 } = await loadFixture(deployCocoaFixture);
-    //   await usdx.connect(otherAccount).approve(cocoa, 10 ** 6 * 200);
-    //   await usdx.connect(acc1).approve(cocoa, 10 ** 6 * 200);
-    //   await usdx.connect(acc2).approve(cocoa, 10 ** 6 * 200);
-    //   await usdx.connect(acc3).approve(cocoa, 10 ** 6 * 200);
-    //   await usdx.connect(acc4).approve(cocoa, 10 ** 6 * 200);
-    //   await expect(cocoa.connect(otherAccount).initSaleUSDT(10 ** 6 * 200)).not.to.be.reverted;
-    //   await expect(cocoa.connect(acc1).initSaleUSDT(10 ** 6 * 200)).not.to.be.reverted;
-    //   await expect(cocoa.connect(acc2).initSaleUSDT(10 ** 6 * 200)).to.be.reverted;
-    //   await expect(cocoa.connect(acc3).initSaleUSDT(10 ** 6 * 200)).to.be.reverted;
-    //   await expect(cocoa.connect(acc4).initSaleUSDT(10 ** 6 * 200)).to.be.reverted;
-    // });
 
     it("Should calc percantages", async function () {
       const { cocoa, usdx, owner, otherAccount, acc1, acc2, acc3, acc4 } = await loadFixture(deployCocoaFixture);
-      await usdx.connect(acc1).approve(cocoa, 10 ** 6 * 100);
-      await usdx.connect(acc2).approve(cocoa, 10 ** 6 * 1_000);
-      await usdx.connect(acc3).approve(cocoa, 10 ** 6 * 30_000);
-      await usdx.connect(acc4).approve(cocoa, 10 ** 6 * 4000);
-      await expect(cocoa.connect(acc1).initSaleUSDT(10 ** 6 * 100)).not.to.be.reverted;
-      await expect(cocoa.connect(acc2).initSaleUSDT(10 ** 6 * 1_000)).not.to.be.reverted;
-      await expect(cocoa.connect(acc3).initSaleUSDT(10 ** 6 * 30_000)).not.to.be.reverted;
-      await expect(cocoa.connect(acc4).initSaleUSDT(10 ** 6 * 4000)).not.to.be.reverted;
-      await usdx.connect(owner).approve(cocoa, 10 ** 6 * 300_000);
-      await expect(cocoa.connect(owner).depositFunds(10 ** 6 * 300_000)).not.to.be.reverted;
-      expect(await cocoa.connect(otherAccount).getRewardsTotal()).to.equal(10**6*300_000);
-      console.log('calc percentage :>> ', await cocoa.connect(acc1).calculateUserTokenPercentage());
-      console.log('calc percentage :>> ', await cocoa.connect(acc2).calculateUserTokenPercentage());
-      console.log('calc percentage :>> ', await cocoa.connect(acc3).calculateUserTokenPercentage());
-      console.log('calc percentage :>> ', await cocoa.connect(acc4).calculateUserTokenPercentage());
+      const amounts = [
+        ethers.parseUnits("500", 18),
+        ethers.parseUnits("1000", 18),
+        ethers.parseUnits("30000", 18),
+        ethers.parseUnits("4000", 18)
+      ];
+      const accounts = [acc1, acc2, acc3, acc4];
+
+      for (let i = 0; i < amounts.length; i++) {
+        await usdx.connect(accounts[i]).approve(cocoa, amounts[i]);
+        await expect(cocoa.connect(accounts[i]).initSaleUSDT(amounts[i])).not.to.be.reverted;
+      }
+
+      const depositAmount = ethers.parseUnits("300000", 18);
+      await usdx.connect(owner).approve(cocoa, depositAmount);
+      await expect(cocoa.connect(owner).depositFunds(depositAmount)).not.to.be.reverted;
+      expect(await cocoa.connect(otherAccount).getRewardsTotal()).to.equal(depositAmount);
     });
 
     it("Should claim rewards", async function () {
       const { capacity, cocoa, usdx, owner, otherAccount, acc1 } = await loadFixture(deployCocoaFixture);
-      console.log('init calc percentage acc1:>> ', await cocoa.connect(acc1).calculateUserTokenPercentage());
-      await usdx.connect(acc1).approve(cocoa, 10 ** 6 * 12_000);
-      await expect(cocoa.connect(acc1).initSaleUSDT(10 ** 6 * 12_000)).not.to.be.reverted;
-      console.log('sale percentage acc1:>> ', await cocoa.connect(acc1).calculateUserTokenPercentage());
+      const saleAmount = ethers.parseUnits("12000", 18);
+      await usdx.connect(acc1).approve(cocoa, saleAmount);
+      await expect(cocoa.connect(acc1).initSaleUSDT(saleAmount)).not.to.be.reverted;
 
-      await usdx.connect(owner).approve(cocoa, 10 ** 6 * 400_000);
-      await expect(cocoa.connect(owner).depositFunds(10 ** 6 * 400_000)).not.to.be.reverted;
-      expect(await cocoa.connect(otherAccount).getRewardsTotal()).to.equal(10 ** 6 * 400_000);
-      await cocoa.connect(acc1).approve(cocoa, 10 ** 6 * 12_000);
+      const depositAmount = ethers.parseUnits("400000", 18);
+      await usdx.connect(owner).approve(cocoa, depositAmount);
+      await expect(cocoa.connect(owner).depositFunds(depositAmount)).not.to.be.reverted;
+      expect(await cocoa.connect(otherAccount).getRewardsTotal()).to.equal(depositAmount);
+
+      const acc1CocoaBalance = await cocoa.balanceOf(acc1);
+      await cocoa.connect(acc1).approve(await cocoa.getAddress(), acc1CocoaBalance);
       await cocoa.connect(acc1).claim();
 
-      console.log('totalSupply :>> ', await cocoa.connect(acc1).totalSupply());
-      // console.log('getRewardsTotal :>> ', await cocoa.connect(acc1).getRewardsTotal());
-      console.log('usdx.balanceOf(acc1) :>> ', await usdx.balanceOf(acc1));
-      console.log('cocoa.balanceOf(acc1) :>> ', await cocoa.balanceOf(acc1));
-
-      // expect(await usdx.balanceOf(acc1)).to.equal(10 ** 6 * 12_000);
-      expect(await cocoa.connect(acc1).calculateUserTokenPercentage()).to.equal(0n)
-      expect(await cocoa.connect(acc1).totalSupply()).to.equal(capacity - (10 ** 6 * 12_000))
-      // console.log('claimed percentage acc1:>> ', await cocoa.connect(acc1).calculateUserTokenPercentage());
+      expect(await cocoa.connect(acc1).calculateUserTokenPercentage()).to.equal(0n);
+      const expectedTotalSupply = capacity - ethers.parseUnits("12000", 6);
+      expect(await cocoa.totalSupply()).to.equal(expectedTotalSupply);
     });
 
     it("Should get balance by wallet", async function () {
-      const { capacity, cocoa, usdx, owner, otherAccount, acc1 } = await loadFixture(deployCocoaFixture);
-      console.log('getBalanceOf otherAccount', await cocoa.balanceOf(otherAccount));
+      const { cocoa, otherAccount } = await loadFixture(deployCocoaFixture);
+      expect(await cocoa.balanceOf(otherAccount)).to.equal(0);
     });
 
   });

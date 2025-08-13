@@ -26,6 +26,12 @@ module.exports = {
       url: process.env.ALCHEMY_ARB_HTTP_TRANSPORT_URL,
       accounts: [process.env.SIGNER_PRIVATE_KEY],
     },
+    bsc: {
+      url: process.env.ALCHEMY_BSC_URL,
+      accounts: [process.env.SIGNER_PRIVATE_KEY],
+      gasPrice: 100000000,
+      gas: 'auto'
+    },
   },
   hardhat: {
     chainId: 137,

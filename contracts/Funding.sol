@@ -58,6 +58,8 @@ contract Funding is ERC20, ReentrancyGuard {
         _tokensTotal = tokensTotal_;
         _mint(address(this), tokensTotal_);
         _minAmount = minAmount;
+        _tokensSold = 0;
+        isClaimAvailable = false;
     }
 
     modifier onlyOwner() {
@@ -79,6 +81,10 @@ contract Funding is ERC20, ReentrancyGuard {
 
     function tokensSold() external view returns (uint256) {
         return _tokensSold;
+    }
+
+    function tokensTotal() external view returns (uint256) {
+        return _tokensTotal;
     }
 
     function getRemainTokensAmount() public view returns (uint256) {
@@ -105,14 +111,8 @@ contract Funding is ERC20, ReentrancyGuard {
         _increaseSoldTokensAmount(amount);
         userInvestments[user_address][sell_token] += amount;
 
-        bool transferFrom = usd_token.transferFrom(
-            user_address,
-            address(this),
-            amount
-        );
-        if (!transferFrom) {
-            revert TokenTransferFailed();
-        }
+        usd_token.transferFrom(user_address, address(this), amount);
+
         bool transfer = IERC20(address(this)).transfer(user_address, amount);
         if (!transfer) {
             revert TokenTransferFailed();
@@ -186,14 +186,8 @@ contract Funding is ERC20, ReentrancyGuard {
     function depositFunds(IERC20 token, uint256 amount) external onlyOwner {
         isClaimAvailable = true;
         _rewardsTotal += amount;
-        if (token.balanceOf(msg.sender) < amount) {
-            revert InsufficientBalance();
-        }
-
-        bool success = token.transferFrom(msg.sender, address(this), amount);
-        if (!success) {
-            revert TokenTransferFailed();
-        }
+        require(token.balanceOf(msg.sender) > amount, InsufficientBalance());
+        token.transferFrom(msg.sender, address(this), amount);
     }
 
     function decreaseTokensTotal(

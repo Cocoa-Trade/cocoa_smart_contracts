@@ -4,22 +4,38 @@
 pragma solidity 0.8.28;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-contract Funding is ERC20, Ownable, ReentrancyGuard {
+contract Funding is ERC20, ReentrancyGuard {
     bool public isClaimAvailable;
+    address public immutable owner;
     address public immutable usdtAddress;
     address public immutable usdcAddress;
-    uint256 public immutable tokensTotal;
-
-    uint256 private _tokensRemain;
+    uint256 private _tokensTotal;
     uint256 private _tokensSold;
     uint256 private _rewardsTotal;
     uint256 private immutable _minAmount;
 
     mapping(address => mapping(address => uint256)) public userInvestments;
+
+    /* ========================== EVENTS ========================== */
+
+    event Payment(address user_address, uint256 amount, address sell_token);
+    event NewTotalSupply(uint256 newTotal);
+
+    /* ========================== ERRORS ========================== */
+
+    error NotTheOwner();
+    error UserZeroBalance();
+    error ClaimIsNotAvailable();
+    error InsufficientBalance();
+    error TokenTransferFailed();
+    error NewTotalSupplyBelowSold(uint256 newTotal, uint256 sold);
+    error ExceedsTotalSupply(uint256 newSold, uint256 totalSupply);
+    error InsufficientTokens(uint256 currentRemain, uint256 decrementAmount);
+    error AmountBelowMin(uint256 amount, uint256 min);
+    error AmountExceedsAvailable(uint256 amount, uint256 tokensRemain);
 
     constructor(
         address initialOwner,
@@ -29,39 +45,44 @@ contract Funding is ERC20, Ownable, ReentrancyGuard {
         string memory symbol,
         address usdtAddress_,
         address usdcAddress_
-    ) ERC20(name, symbol) Ownable(initialOwner) {
-        _mint(address(this), tokensTotal_);
-        tokensTotal = tokensTotal_;
-        _tokensRemain = tokensTotal_;
-        _minAmount = minAmount;
+    ) ERC20(name, symbol) {
+        if (initialOwner == address(0))
+            revert("Owner cannot be the zero address");
+        if (usdtAddress_ == address(0))
+            revert("USDT address cannot be the zero address");
+        if (usdcAddress_ == address(0))
+            revert("USDC address cannot be the zero address");
+        owner = initialOwner;
         usdtAddress = usdtAddress_;
         usdcAddress = usdcAddress_;
-        isClaimAvailable = false;
+        _tokensTotal = tokensTotal_;
+        _mint(address(this), tokensTotal_);
+        _minAmount = minAmount;
+    }
+
+    modifier onlyOwner() {
+        if (msg.sender != owner) {
+            revert NotTheOwner();
+        }
+        _;
     }
 
     /* =========================== UTILS ========================== */
 
     function _increaseSoldTokensAmount(uint256 amount) private {
         uint256 newSold = _tokensSold + amount;
-        if (newSold > tokensTotal) {
-            revert ExceedsTotalSupply(newSold, tokensTotal);
+        if (newSold > _tokensTotal) {
+            revert ExceedsTotalSupply(newSold, _tokensTotal);
         }
         _tokensSold = newSold;
     }
 
-    function tokensSold() external view returns(uint256) {
+    function tokensSold() external view returns (uint256) {
         return _tokensSold;
     }
 
-    function _decreaseRemainTokensAmount(uint256 amount) private {
-        if (amount > _tokensRemain) {
-            revert InsufficientTokens(_tokensRemain, amount);
-        }
-        _tokensRemain -= amount;
-    }
-
-    function getRemainTokensAmount() external view returns(uint256) {
-        return _tokensRemain;
+    function getRemainTokensAmount() public view returns (uint256) {
+        return _tokensTotal - _tokensSold;
     }
 
     /* ======================= USER ACTIONS ======================= */
@@ -70,96 +91,122 @@ contract Funding is ERC20, Ownable, ReentrancyGuard {
         address user_address,
         uint256 amount,
         address sell_token
-    ) private nonReentrant returns (bool) {
-        require(amount >= _minAmount, "Amount is below minimum");
-        require(amount <= _tokensRemain, "Amount exceeds available tokens");
+    ) private nonReentrant {
+        if (amount < _minAmount) {
+            revert AmountBelowMin(amount, _minAmount);
+        }
+        uint256 _tokensRemain = getRemainTokensAmount();
+        if (amount > _tokensRemain) {
+            revert AmountExceedsAvailable(amount, _tokensRemain);
+        }
 
         IERC20 usd_token = IERC20(sell_token);
 
-        require(
-            usd_token.transferFrom(user_address, address(this), amount),
-            "User tokens transfer failed"
-        );
-        require(
-            IERC20(address(this)).transfer(user_address, amount),
-            "Token transfer failed"
-        );
-
-        _decreaseRemainTokensAmount(amount);
         _increaseSoldTokensAmount(amount);
-
         userInvestments[user_address][sell_token] += amount;
 
+        bool transferFrom = usd_token.transferFrom(
+            user_address,
+            address(this),
+            amount
+        );
+        if (!transferFrom) {
+            revert TokenTransferFailed();
+        }
+        bool transfer = IERC20(address(this)).transfer(user_address, amount);
+        if (!transfer) {
+            revert TokenTransferFailed();
+        }
+
         emit Payment(user_address, amount, sell_token);
-        return true;
     }
 
     function getPercentage() public view returns (uint256) {
         uint256 userBalance = IERC20(address(this)).balanceOf(msg.sender);
-        require(userBalance > 0, "User balance is zero");
-        uint256 percentage = (userBalance * 1e6) / tokensTotal;
+        if (userBalance < 1) {
+            revert UserZeroBalance();
+        }
+        uint256 percentage = (userBalance * 1e6) / _tokensTotal;
         return percentage;
     }
 
     function initSaleUSDT(uint256 amount) external {
-        bool success = _initSale(msg.sender, amount, usdtAddress);
-        require(success, "Token transfer failed");
+        _initSale(msg.sender, amount, usdtAddress);
     }
 
     function initSaleUSDC(uint256 amount) external {
-        bool success = _initSale(msg.sender, amount, usdcAddress);
-        require(success, "Token transfer failed");
+        _initSale(msg.sender, amount, usdcAddress);
     }
 
     function claim() external nonReentrant returns (uint256) {
-        require(
-            isClaimAvailable,
-            "Claim is not available, wait for rewards deposit"
-        );
-
-        uint256 userFundingTokenBalance = balanceOf(msg.sender);
-        require(
-            userFundingTokenBalance > 0,
-            "Claim failed, no funding tokens held"
-        );
-
+        if (!isClaimAvailable) {
+            revert ClaimIsNotAvailable();
+        }
+        uint256 userTokenBalance = balanceOf(msg.sender);
+        if (userTokenBalance < 1) {
+            revert UserZeroBalance();
+        }
         uint256 percentage = getPercentage();
         uint256 userRewardShare = (_rewardsTotal * percentage) / 1e6;
         IERC20 rewardToken = IERC20(usdtAddress);
-        require(
-            rewardToken.balanceOf(address(this)) >= userRewardShare,
-            "Insufficient rewards in contract"
-        );
-
-        _burn(msg.sender, userFundingTokenBalance);
-        rewardToken.transfer(msg.sender, userRewardShare);
+        uint256 rewardsRemaining = rewardToken.balanceOf(address(this));
+        if (rewardsRemaining < userRewardShare) {
+            revert InsufficientBalance();
+        }
+        _burn(msg.sender, userTokenBalance);
+        bool success = rewardToken.transfer(msg.sender, userRewardShare);
+        if (!success) {
+            revert TokenTransferFailed();
+        }
         return userRewardShare;
     }
 
     /* ====================== ADMIN ACTIONS ====================== */
 
     function withdraw(IERC20 token, uint256 amount) external onlyOwner {
-        require(token.balanceOf(address(this)) >= amount, "Not enough balance");
-        require(token.transfer(owner(), amount), "Withdraw to owner failed");
+        if (token.balanceOf(address(this)) < amount) {
+            revert InsufficientBalance();
+        }
+        bool success = token.transfer(owner, amount);
+        if (!success) {
+            revert TokenTransferFailed();
+        }
     }
 
     function withdrawNative(uint amount) external onlyOwner {
-        require(address(this).balance >= amount, "Not enough native tokens");
-        (bool success, ) = owner().call{value: amount}("");
-        require(success, "Failed to send native token");
+        if (address(this).balance < amount) {
+            revert InsufficientBalance();
+        }
+        (bool success, ) = owner.call{value: amount}("");
+        if (!success) {
+            revert TokenTransferFailed();
+        }
     }
 
     function depositFunds(IERC20 token, uint256 amount) external onlyOwner {
-        require(
-            token.balanceOf(msg.sender) >= amount,
-            "Insufficient Token balance"
-        );
-        require(
-            token.transferFrom(msg.sender, address(this), amount),
-            "Deposit transfer failed"
-        );
         isClaimAvailable = true;
         _rewardsTotal += amount;
+        if (token.balanceOf(msg.sender) < amount) {
+            revert InsufficientBalance();
+        }
+
+        bool success = token.transferFrom(msg.sender, address(this), amount);
+        if (!success) {
+            revert TokenTransferFailed();
+        }
+    }
+
+    function decreaseTokensTotal(
+        uint256 amountToBurn
+    ) external onlyOwner returns (uint256) {
+        uint256 newTotalSupply = _tokensTotal - amountToBurn;
+        if (newTotalSupply < _tokensSold) {
+            revert NewTotalSupplyBelowSold(newTotalSupply, _tokensSold);
+        }
+        _tokensTotal = newTotalSupply;
+        _burn(address(this), amountToBurn);
+        emit NewTotalSupply(newTotalSupply);
+        return _tokensTotal;
     }
 
     /* ========================= RECEIVE ========================= */
@@ -173,13 +220,4 @@ contract Funding is ERC20, Ownable, ReentrancyGuard {
     fallback() external payable {
         revert("Oops...dont do this");
     }
-
-    /* ========================== EVENTS ========================== */
-
-    event Payment(address user_address, uint256 amount, address sell_token);
-
-    /* ========================== ERRORS ========================== */
-
-    error ExceedsTotalSupply(uint256 newSold, uint256 totalSupply);
-    error InsufficientTokens(uint256 currentRemain, uint256 decrementAmount);
 }

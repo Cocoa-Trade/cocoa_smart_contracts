@@ -66,7 +66,7 @@ describe("Funding", function () {
     it("Should revert if amount is less than minAmount", async function () {
       const { funding, user1 } = await loadFixture(deployFundingFixture);
       const amountToBuy = ethers.parseUnits("0.5", 18); // less than 100
-      await expect(funding.connect(user1).initSaleUSDT(amountToBuy)).to.be.revertedWith("Amount is below minimum");
+      await expect(funding.connect(user1).initSaleUSDT(amountToBuy)).to.be.revertedWithCustomError(funding, "AmountBelowMin");
     });
 
     it("Should revert if user has not approved tokens", async function () {
@@ -98,7 +98,7 @@ describe("Funding", function () {
       await usdx.connect(user1).approve(fundingAddress, amount1);
       await funding.connect(user1).initSaleUSDT(amount1);
       await usdx.connect(user1).approve(fundingAddress, amount2);
-      await expect(funding.connect(user1).initSaleUSDT(amount2)).to.be.revertedWith("Amount exceeds available tokens");
+      await expect(funding.connect(user1).initSaleUSDT(amount2)).to.be.revertedWithCustomError(funding, "AmountExceedsAvailable");
     });
   });
 
@@ -118,7 +118,7 @@ describe("Funding", function () {
 
     it("Should not allow non-owner to withdraw", async function () {
       const { funding, usdx, user1 } = await loadFixture(deployFundingFixture);
-      await expect(funding.connect(user1).withdraw(usdx, ethers.parseUnits("100", 18))).to.be.revertedWithCustomError(funding, "OwnableUnauthorizedAccount");
+      await expect(funding.connect(user1).withdraw(usdx, ethers.parseUnits("100", 18))).to.be.revertedWithCustomError(funding, "NotTheOwner");
     });
   });
 
@@ -196,7 +196,7 @@ describe("Funding", function () {
 
     it("Should revert if claim is not available", async function () {
       const { funding, user1 } = await loadFixture(setupClaimFixture);
-      await expect(funding.connect(user1).claim()).to.be.revertedWith("Claim is not available, wait for rewards deposit");
+      await expect(funding.connect(user1).claim()).to.be.revertedWithCustomError(funding, "ClaimIsNotAvailable");
     });
 
     it("Should revert if user has no funding tokens", async function () {
@@ -209,7 +209,7 @@ describe("Funding", function () {
       await usdx.connect(owner).approve(await funding.getAddress(), rewardsAmount);
       await funding.connect(owner).depositFunds(usdx, rewardsAmount);
 
-      await expect(funding.connect(user3).claim()).to.be.revertedWith("Claim failed, no funding tokens held");
+      await expect(funding.connect(user3).claim()).to.be.revertedWithCustomError(funding, "UserZeroBalance");
     });
 
     it("Should handle multiple users claiming correctly", async function () {
@@ -260,6 +260,56 @@ describe("Funding", function () {
       expect(await funding.balanceOf(user1.address)).to.equal(0);
 
     });
+
+  describe("decreaseTokensTotal", function () {
+    it("Should allow the owner to decrease the total supply", async function () {
+      const { funding, owner } = await loadFixture(deployFundingFixture);
+      const amountToBurn = ethers.parseUnits("100", 18);
+      const initialTotalSupply = await funding.totalSupply();
+      const initialRemain = await funding.getRemainTokensAmount();
+
+      await expect(funding.connect(owner).decreaseTokensTotal(amountToBurn)).to.not.be.reverted;
+
+      const newTotalSupply = await funding.totalSupply();
+      const newRemain = await funding.getRemainTokensAmount();
+
+      expect(newTotalSupply).to.equal(initialTotalSupply - amountToBurn);
+      expect(newRemain).to.equal(initialRemain - amountToBurn);
+      expect(await funding.balanceOf(await funding.getAddress())).to.equal(initialTotalSupply - amountToBurn);
+    });
+
+    it("Should revert if called by a non-owner", async function () {
+      const { funding, user1 } = await loadFixture(deployFundingFixture);
+      const amountToBurn = ethers.parseUnits("100", 18);
+      await expect(funding.connect(user1).decreaseTokensTotal(amountToBurn)).to.be.revertedWithCustomError(funding, "NotTheOwner");
+    });
+
+    it("Should revert if new total supply is less than tokens sold", async function () {
+      const { funding, owner, usdx, user1, fundingAddress } = await loadFixture(deployFundingFixture);
+      const amountToBuy = ethers.parseUnits("500", 18);
+      await usdx.connect(user1).approve(fundingAddress, amountToBuy);
+      await funding.connect(user1).initSaleUSDT(amountToBuy);
+
+      const soldTokens = await funding.tokensSold()
+      const currentTotalSupply = await funding.totalSupply();
+      const amountToBurn = currentTotalSupply - soldTokens + BigInt(1);
+      await expect(funding.connect(owner).decreaseTokensTotal(amountToBurn)).to.be.revertedWithCustomError(funding, "NewTotalSupplyBelowSold");
+    });
+    it("Should be 100% after decrease", async function () {
+      const { funding, owner, usdx, user1, fundingAddress } = await loadFixture(deployFundingFixture);
+      const amountToBuy = ethers.parseUnits("500", 18);
+      await usdx.connect(user1).approve(fundingAddress, amountToBuy);
+      await funding.connect(user1).initSaleUSDT(amountToBuy);
+
+      const soldTokens = await funding.tokensSold()
+      const currentTotalSupply = await funding.totalSupply();
+      const amountToBurn = currentTotalSupply - soldTokens;
+      await funding.connect(owner).decreaseTokensTotal(amountToBurn);
+      const contract_percentage = await funding.connect(user1).getPercentage();
+      // 1000000n = 100.0000 = 100%
+      expect(contract_percentage).to.be.equal(1000000n);
+    });
+  });
 
   });
 });
